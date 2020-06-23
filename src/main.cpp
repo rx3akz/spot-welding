@@ -1,10 +1,14 @@
 #include <Arduino.h>
 #include <LiquidCrystal.h>
 
+
 void OnWeldBtn();
 void OnMenuBtn();
 void WedingImpulse();
 void MenuProc();
+
+enum eMenuItem {IMP_DUR, PAUSE_BW_IMP, IMP_NUM, MENU_EXIT};
+
 
 float g_fInputVoltage = 0.0, g_fWeldingVoltage = 0.0, g_fInMul = 5.0, g_fWeldMul = 4.0;
 char g_chOutStr[17];
@@ -13,6 +17,15 @@ char g_chWeldingVoltage[6];
 unsigned long g_ulmillsPrev = 0;
 unsigned long g_ulmillsCurrent = 0;
 const unsigned long g_ulmillsInteval = 100;
+
+// Impulse duration/pause between impulses, ms 
+const unsigned long g_ulImpDurMin = 50;
+const unsigned long g_ulImpDurMax = 1000;
+
+unsigned long g_ulImpDur = 100;
+unsigned long g_ulPause = 100;
+unsigned long g_ulNumOfImp = 2;
+byte g_btMenuItem = IMP_DUR;
 
 // Welding button is pressed
 volatile bool g_bWeldButIsPressed = false; 
@@ -80,7 +93,7 @@ void setup() {
 }
 
 void loop() {
-unsigned long l_ulCyclesCount = 0;
+    unsigned long l_ulCyclesCount = 0;
  
     g_fInputVoltage = 0.0;
     g_fWeldingVoltage = 0.0;
@@ -98,7 +111,12 @@ unsigned long l_ulCyclesCount = 0;
         
         // Increment Cecles count
         l_ulCyclesCount++;
-        
+
+        // Was interupts from buttons ? 
+        if (g_bWeldButIsPressed || g_bMenuButIsPressed ) {
+            break;    
+        }
+    
         // On the rest
         delay(10);
         
@@ -131,11 +149,43 @@ unsigned long l_ulCyclesCount = 0;
     delay(1000); 
 }
 
+
 void WedingImpulse(){
 
 }
 
-void MenuProc(){
+void MenuProc() {
+    int l_iMenuUpBtn, l_iMenuDownBtn;
+    
+    while (true) {
+
+        // Read buttons state
+        l_iMenuUpBtn = digitalRead(g_btMenuUpBtnPin);
+        l_iMenuDownBtn = digitalRead(g_btMenuUpBtnPin); 
+
+        switch (g_btMenuItem) {
+        case IMP_DUR:
+            if(l_iMenuUpBtn) {
+                g_ulImpDur += g_ulImpDurMin;
+                if (g_ulImpDur > g_ulImpDurMax)
+                    g_ulImpDur = g_ulImpDurMax;
+            }
+            else if( l_iMenuDownBtn) {
+                g_ulImpDur -= g_ulImpDurMin;
+                if (g_ulImpDur < g_ulImpDurMin)
+                    g_ulImpDur = g_ulImpDurMin;
+            }
+            break;
+        
+        default:
+            break;
+        }
+
+
+
+    }
+
+
 
 
 }
