@@ -1,4 +1,5 @@
 #include <Arduino.h>
+#include <avr/sleep.h>
 #include <LiquidCrystal.h>
 
 
@@ -6,6 +7,11 @@ void OnWeldBtn();
 void OnMenuBtn();
 void WedingImpulse();
 void MenuProc();
+unsigned long ChangeValue(unsigned long ulValue,
+                          unsigned long ulMin,                         
+                          unsigned long ulMax,                         
+                          int iMenuUpBtn,     
+                          int iMenuDownBtn);
 
 enum eMenuItem {IMP_DUR, PAUSE_BW_IMP, IMP_NUM, MENU_EXIT};
 
@@ -86,10 +92,13 @@ void setup() {
     g_fInMul = (g_fInMul * 5)/1023.0;
     g_fWeldMul = (g_fWeldMul * 5)/1023.0;
     
-    attachInterrupt(digitalPinToInterrupt(g_btWeldBtnPin), OnWeldBtn, LOW);
-    attachInterrupt(digitalPinToInterrupt(g_btMenuBtnPin), OnMenuBtn, LOW);
+    g_bWeldButIsPressed = false;
+    g_bMenuButIsPressed = false;
 
-    // Serial.begin(9600);
+    attachInterrupt(digitalPinToInterrupt(g_btWeldBtnPin), OnWeldBtn, FALLING);
+    attachInterrupt(digitalPinToInterrupt(g_btMenuBtnPin), OnMenuBtn, FALLING);
+
+    Serial.begin(9600);
 }
 
 void loop() {
@@ -99,6 +108,7 @@ void loop() {
     g_fWeldingVoltage = 0.0;
     
     g_bWeldButIsPressed = false;
+    g_bMenuButIsPressed = false;
 
     g_ulmillsPrev =  millis();
         
@@ -136,73 +146,176 @@ void loop() {
     lcd.setCursor(0, 0);
     lcd.print(g_chOutStr);
 
+    // print welding params
+    // Pos - 0, row - 2 
+    lcd.setCursor(0, 1);
+    sprintf(g_chOutStr, "P: %lu %lu %lu", g_ulImpDur,
+                                          g_ulPause,
+                                          g_ulNumOfImp);
+    lcd.print(g_chOutStr);
+
+    sprintf(g_chOutStr, "Welding: %i Menu:  %i",  g_bWeldButIsPressed, g_bMenuButIsPressed); 
+    Serial.println(g_chOutStr);
+
     if (g_bWeldButIsPressed) {
         WedingImpulse();    
     }
     else if(g_bMenuButIsPressed) {
-        void MenuProc();
+        MenuProc();
     }
 
-    lcd.setCursor(10, 1);
-    // print the number of seconds since reset:
-    lcd.print(millis() / 1000);
-    delay(1000); 
 }
-
 
 void WedingImpulse(){
 
+    unsigned long l_ulIndx;
+
+    // Power Off from ionistor 
+    digitalWrite(g_btPwOFFIonistorPin, LOW);
+    delay(10);
+
+    lcd.setCursor(0, 1);
+    lcd.print("Fire!!!!!!!!!!!");
+
+    for(l_ulIndx = 0; l_ulIndx < g_ulNumOfImp; l_ulIndx++) {
+        digitalWrite(g_btWeldingImpulsPin, LOW);
+        delay(g_ulImpDur);
+        digitalWrite(g_btWeldingImpulsPin, HIGH);
+        delay(g_ulPause);
+    }
+
+    // Power On to ionistor 
+    digitalWrite(g_btPwOFFIonistorPin, HIGH);
+
+    g_bWeldButIsPressed = false;
+    g_bMenuButIsPressed = false;
+    attachInterrupt(digitalPinToInterrupt(g_btWeldBtnPin), OnWeldBtn, FALLING);
+    attachInterrupt(digitalPinToInterrupt(g_btMenuBtnPin), OnMenuBtn, FALLING);
 }
 
 void MenuProc() {
     int l_iMenuUpBtn, l_iMenuDownBtn;
-    
+    bool l_bFirstPass = true;
+
+    g_btMenuItem = IMP_DUR; 
+    Serial.println("Menu proc");
+    Serial.print("Menu Item: ");
+    Serial.println(g_btMenuItem);
+    delay(100);
+
+    lcd.clear();
+
     while (true) {
 
-        // Read buttons state
+        // Read Up/Down buttons state
         l_iMenuUpBtn = digitalRead(g_btMenuUpBtnPin);
-        l_iMenuDownBtn = digitalRead(g_btMenuUpBtnPin); 
+        l_iMenuDownBtn = digitalRead(g_btMenuDownBtnPin); 
+
+        if(l_iMenuUpBtn == HIGH &&  l_iMenuDownBtn == HIGH && !l_bFirstPass) {
+            g_btMenuItem++;
+            if(g_btMenuItem > MENU_EXIT )
+                g_btMenuItem = IMP_DUR;
+
+        }
+    
+        Serial.print("Menu Buttons: ");
+        Serial.print(l_iMenuUpBtn);
+        Serial.print(",");
+        Serial.println(l_iMenuDownBtn);
+        
+        Serial.print("Menu Item: ");
+        Serial.println(g_btMenuItem);
 
         switch (g_btMenuItem) {
         case IMP_DUR:
-            if(l_iMenuUpBtn) {
-                g_ulImpDur += g_ulImpDurMin;
-                if (g_ulImpDur > g_ulImpDurMax)
-                    g_ulImpDur = g_ulImpDurMax;
-            }
-            else if( l_iMenuDownBtn) {
-                g_ulImpDur -= g_ulImpDurMin;
-                if (g_ulImpDur < g_ulImpDurMin)
-                    g_ulImpDur = g_ulImpDurMin;
-            }
+            g_ulImpDur = ChangeValue(g_ulImpDur,
+                                     g_ulImpDurMin,
+                                     g_ulImpDurMax,
+                                     l_iMenuUpBtn,
+                                     l_iMenuDownBtn);
+            sprintf(g_chOutStr, "Imp Dur: %lu   ", g_ulImpDur);
+            Serial.println(g_chOutStr);                                     
             break;
-        
+        case PAUSE_BW_IMP:
+            g_ulPause = ChangeValue(g_ulPause,
+                                    g_ulImpDurMin,
+                                    g_ulImpDurMax,
+                                    l_iMenuUpBtn,
+                                    l_iMenuDownBtn);
+            sprintf(g_chOutStr, "Pause: %lu  ", g_ulPause);
+            Serial.println(g_chOutStr);                        
+            break;
+
+        case IMP_NUM:                                        
+            g_ulNumOfImp = ChangeValue(g_ulNumOfImp,
+                                       1,
+                                       10,
+                                       l_iMenuUpBtn,
+                                       l_iMenuDownBtn);
+            sprintf(g_chOutStr, "Pulses: %lu     ", g_ulNumOfImp);
+            Serial.println(g_chOutStr);                           
+            break;
+
+        case MENU_EXIT:
+            Serial.println("Exit"); 
+            if(l_iMenuUpBtn == LOW || l_iMenuDownBtn == LOW) {
+                g_bWeldButIsPressed = false;
+                g_bMenuButIsPressed = false;
+                attachInterrupt(digitalPinToInterrupt(g_btWeldBtnPin), OnWeldBtn, FALLING);
+                attachInterrupt(digitalPinToInterrupt(g_btMenuBtnPin), OnMenuBtn, FALLING);
+                return;                
+            }
+            sprintf(g_chOutStr, "Exit           ");
+            break;
+
         default:
             break;
         }
 
+        delay(100);
 
+        lcd.setCursor(0, 0);
+        lcd.print("Menu:          ");
+        lcd.setCursor(0, 1);
+        lcd.print(g_chOutStr);
+        
+        Serial.print("Menu Item: ");
+        Serial.println(g_btMenuItem);
+        delay(100);
 
+        attachInterrupt(digitalPinToInterrupt(g_btMenuBtnPin), OnMenuBtn, FALLING);
+        set_sleep_mode(SLEEP_MODE_PWR_DOWN); // PowerDown
+        sleep_mode(); // on the rest
+        delay(50);
+        l_bFirstPass = false;
+    }
+}
+
+unsigned long ChangeValue(unsigned long ulValue,
+                          unsigned long ulMin,                         
+                          unsigned long ulMax,                         
+                          int iMenuUpBtn,     
+                          int iMenuDownBtn) {
+
+    if(iMenuUpBtn == LOW) {
+        ulValue += ulMin;
+        if ( ulValue > ulMax)
+            ulValue = ulMax;
+    }
+    else if(iMenuDownBtn == LOW) {
+        ulValue -= ulMin;
+        if (ulValue < ulMin)
+            ulValue = ulMin;
     }
 
-
-
-
+    return ulValue;
 }
 
 void OnWeldBtn() {
     g_bWeldButIsPressed = true;
-    
-    //Disable interrupt from buttons
-    detachInterrupt(digitalPinToInterrupt(g_btWeldBtnPin));
-    detachInterrupt(digitalPinToInterrupt(g_btMenuBtnPin));
 }
 
 void OnMenuBtn() {
     g_bMenuButIsPressed = true;
-    
-    //Disable interrupt from buttons
-    detachInterrupt(digitalPinToInterrupt(g_btWeldBtnPin));
-    detachInterrupt(digitalPinToInterrupt(g_btMenuBtnPin));
 }
 
