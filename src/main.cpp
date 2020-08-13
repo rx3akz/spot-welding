@@ -22,7 +22,7 @@ char g_chInputVoltage[6];
 char g_chWeldingVoltage[6];
 unsigned long g_ulmillsPrev = 0;
 unsigned long g_ulmillsCurrent = 0;
-const unsigned long g_ulmillsInteval = 100;
+const unsigned long g_ulmillsInteval = 500;
 
 // Impulse duration/pause between impulses, ms 
 const unsigned long g_ulImpDurMin = 50;
@@ -38,7 +38,6 @@ volatile bool g_bWeldButIsPressed = false;
 
 // Menu button is pressed
 volatile bool g_bMenuButIsPressed = false; 
-
 
 // Welding button pin (interrupt)
 const byte g_btWeldBtnPin = 2;
@@ -85,7 +84,7 @@ void setup() {
 
     // Set outputs
     digitalWrite(g_btWeldingImpulsPin, HIGH); // pin to invertion amp 
-    digitalWrite(g_btPwOFFIonistorPin, HIGH); //
+    digitalWrite(g_btPwOFFIonistorPin, HIGH); // HIGH - Off, LOW - On
 
     delay(2000);
   
@@ -94,6 +93,9 @@ void setup() {
     
     g_bWeldButIsPressed = false;
     g_bMenuButIsPressed = false;
+
+    digitalWrite(g_btPwOFFIonistorPin, LOW); // LOW - On
+
 
     attachInterrupt(digitalPinToInterrupt(g_btWeldBtnPin), OnWeldBtn, FALLING);
     attachInterrupt(digitalPinToInterrupt(g_btMenuBtnPin), OnMenuBtn, FALLING);
@@ -171,9 +173,10 @@ void WedingImpulse(){
     unsigned long l_ulIndx;
 
     // Power Off from ionistor 
-    digitalWrite(g_btPwOFFIonistorPin, LOW);
+    digitalWrite(g_btPwOFFIonistorPin, HIGH);
     delay(10);
 
+    lcd.clear();
     lcd.setCursor(0, 1);
     lcd.print("Fire!!!!!!!!!!!");
 
@@ -184,8 +187,10 @@ void WedingImpulse(){
         delay(g_ulPause);
     }
 
+    lcd.clear();
+
     // Power On to ionistor 
-    digitalWrite(g_btPwOFFIonistorPin, HIGH);
+    digitalWrite(g_btPwOFFIonistorPin, LOW);
 
     g_bWeldButIsPressed = false;
     g_bMenuButIsPressed = false;
